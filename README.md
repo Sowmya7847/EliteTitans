@@ -1,1 +1,216 @@
-# EliteTitans
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>EliteTitans Chat with File Sharing & Delete</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #ece5dd;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    header {
+      background-color: #075E54;
+      color: white;
+      padding: 1rem;
+      text-align: center;
+      font-size: 1.2rem;
+    }
+    #chat-box {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem;
+      background: #dcf8c6;
+      display: flex;
+      flex-direction: column;
+    }
+    .message {
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 0.6rem;
+      margin-bottom: 0.5rem;
+      max-width: 70%;
+      word-wrap: break-word;
+      position: relative;
+    }
+    .you {
+      background-color: #dcf8c6;
+      margin-left: auto;
+      text-align: right;
+    }
+    .username {
+      font-weight: bold;
+      font-size: 0.9rem;
+      margin-bottom: 0.2rem;
+    }
+    .timestamp {
+      font-size: 0.7rem;
+      color: #555;
+      margin-top: 0.4rem;
+    }
+    .actions {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      display: flex;
+      gap: 4px;
+    }
+    .actions button {
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      background: #f44336;
+      border: none;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #input-area {
+      display: flex;
+      padding: 0.8rem;
+      background: #f0f0f0;
+      gap: 0.5rem;
+    }
+    #msgInput {
+      flex: 1;
+      padding: 0.7rem;
+      border: 1px solid #ccc;
+      border-radius: 20px;
+      outline: none;
+      font-size: 1rem;
+    }
+    #sendBtn, #fileInputBtn {
+      padding: 0.7rem 1.2rem;
+      background-color: #25D366;
+      border: none;
+      border-radius: 20px;
+      color: white;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    #fileInput {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <header>EliteTitans Chat + File Sharing</header>
+  <div id="chat-box"></div>
+  <div id="input-area">
+    <input type="text" id="msgInput" placeholder="Type a message..." />
+    <button id="fileInputBtn">📎</button>
+    <input type="file" id="fileInput" />
+    <button id="sendBtn">Send</button>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+    import { getDatabase, ref, push, onValue, update } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
+    import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-storage.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAs6SuTkauJ_TSsWrcpbiLe0ae_86i90gs",
+      authDomain: "elitetitans-f6307.firebaseapp.com",
+      databaseURL: "https://elitetitans-f6307-default-rtdb.firebaseio.com",
+      projectId: "elitetitans-f6307",
+      storageBucket: "elitetitans-f6307.appspot.com",
+      messagingSenderId: "448495913827",
+      appId: "1:448495913827:web:95d594215781e2c803a156"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const chatRef = ref(db, "chat");
+    const storage = getStorage(app);
+
+    const chatBox = document.getElementById("chat-box");
+    const msgInput = document.getElementById("msgInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const fileInput = document.getElementById("fileInput");
+    const fileInputBtn = document.getElementById("fileInputBtn");
+
+    let username = localStorage.getItem("username") || prompt("Enter your name:") || "Anonymous";
+    localStorage.setItem("username", username);
+
+    fileInputBtn.addEventListener("click", () => fileInput.click());
+
+    fileInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const filePath = `uploads/${Date.now()}_${file.name}`;
+      const fileRef = storageRef(storage, filePath);
+      await uploadBytes(fileRef, file);
+      const downloadURL = await getDownloadURL(fileRef);
+
+      await push(chatRef, {
+        user: username,
+        message: `<a href='${downloadURL}' target='_blank'>📎 ${file.name}</a>`,
+        timestamp: new Date().toLocaleTimeString()
+      });
+
+      fileInput.value = "";
+    });
+
+    sendBtn.addEventListener("click", async () => {
+      const msg = msgInput.value.trim();
+      if (!msg) return;
+
+      await push(chatRef, {
+        user: username,
+        message: msg,
+        timestamp: new Date().toLocaleTimeString()
+      });
+
+      msgInput.value = "";
+    });
+
+    onValue(chatRef, (snapshot) => {
+      chatBox.innerHTML = "";
+      const data = snapshot.val();
+      if (!data) return;
+      Object.entries(data).forEach(([key, msg]) => {
+        const msgDiv = document.createElement("div");
+        msgDiv.className = "message";
+        if (msg.user === username) msgDiv.classList.add("you");
+
+        const content = document.createElement("div");
+        content.className = "content";
+        content.innerHTML = msg.message === "__deleted__" ? "<i>Message deleted</i>" : msg.message;
+
+        msgDiv.innerHTML = `
+          <div class="username">${msg.user}</div>
+        `;
+        msgDiv.appendChild(content);
+        msgDiv.innerHTML += `<div class="timestamp">${msg.timestamp}</div>`;
+
+        if (msg.user === username && msg.message !== "__deleted__") {
+          const actions = document.createElement("div");
+          actions.className = "actions";
+
+          const delMe = document.createElement("button");
+          delMe.textContent = "Delete for me";
+          delMe.onclick = () => msgDiv.remove();
+
+          const delAll = document.createElement("button");
+          delAll.textContent = "Delete for all";
+          delAll.onclick = async () => {
+            if (confirm("Delete for everyone?")) {
+              await update(ref(db, `chat/${key}`), { message: "__deleted__" });
+            }
+          };
+
+          actions.appendChild(delMe);
+          actions.appendChild(delAll);
+          msgDiv.appendChild(actions);
+        }
+
+        chatBox.appendChild(msgDiv);
+      });
+      chatBox.scrollTop = chatBox.scrollHeight;
+    });
+  </script>
+</body>
+</html>
